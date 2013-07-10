@@ -24,7 +24,10 @@ References:
 var fs = require('fs');
 var program = require('commander');
 var cheerio = require('cheerio');
-var HTMLFILE_DEFAULT = "index.html";
+var rest = require('restler');
+var util = require('util');
+
+var HTMLFILE_DEFAULT = "temp.html";
 var CHECKSFILE_DEFAULT = "checks.json";
 
 var assertFileExists = function(infile) {
@@ -55,6 +58,43 @@ var checkHtmlFile = function(htmlfile, checksfile) {
     return out;
 };
 
+// function for checking when input is URL
+var cheerioUrl = function(html) {
+    return cheerio.load(html);
+};
+
+
+var checkUrl2 = function(html, checksfile) {
+    $ = cheerioUrl(html);
+    console.log("The checksfile is..." + checksfile);
+    var checks = loadChecks(checksfile).sort();
+    var out = {};
+    for (var ii in checks) {
+	var present = $(checks[ii]).length > 0;
+	out[checks[ii]] = present;
+    }
+    return out;
+};
+
+var wrapperUrl = function(url, checksfile) {
+    rest.get(url).on('complete', checkUrl2(result, checksfile));
+};
+
+var checkUrl  = function(url, checksfile) {
+    rest.get(url).on('complete', function(result) {
+//	console.log("Result should be here: " + result);
+	$ = cheerioUrl(result);
+	var checks = loadChecks(checksfile).sort();
+	var out = {};
+	for (var ii in checks) {
+            var present = $(checks[ii]).length > 0;
+            out[checks[ii]] = present;
+	}
+        var outJson = JSON.stringify(out, null, 4);
+        console.log(outJson);
+    });
+};
+
 var clone = function(fn) {
     // Workaround for commander.js issue.
     // http://stackoverflow.com/a/6772648
@@ -65,10 +105,13 @@ if(require.main == module) {
     program
 	.option('-c, --checks <check_file>', 'Path to checks.json', clone(assertFileExists), CHECKSFILE_DEFAULT)
 	.option('-f, --file <html_file>', 'Path to index.html', clone(assertFileExists), HTMLFILE_DEFAULT)
+	.option('-u, --url <url>', 'URL')
 	.parse(process.argv);
-    var checkJson = checkHtmlFile(program.file, program.checks);
-    var outJson = JSON.stringify(checkJson, null, 4);
-    console.log(outJson);
+    if (program.url) {
+	var checkJson = checkUrl(program.url, program.checks);
+    } else {
+	var checkJson = checkHtmlFile(program.file, program.checks);
+    }
 } else {
     exports.checkHtmlFile = checkHtmlFile;
 }
